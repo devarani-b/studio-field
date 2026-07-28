@@ -1,0 +1,53 @@
+name: Daily refresh
+
+on:
+  schedule:
+    # Runs every day at 02:30 UTC = 08:00 India Standard Time
+    - cron: '30 2 * * *'
+  workflow_dispatch:   # also allows manual "Run" button in GitHub UI
+
+permissions:
+  contents: write      # allow the workflow to commit index.html
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out the repo
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Run the refresh script
+        env:
+          SITE_URL: ${{ secrets.SITE_URL }}
+        run: python refresh.py
+
+      - name: Commit updated index.html
+        run: |
+          git config user.name  "Studio Field Bot"
+          git config user.email "bot@studiofield.local"
+          git add index.html
+          if git diff --cached --quiet; then
+            echo "No changes to commit."
+          else
+            git commit -m "Daily refresh $(date -u +'%Y-%m-%d')"
+            git push
+          fi
+
+      - name: Send email preview
+        if: ${{ hashFiles('email-body.html') != '' }}
+        uses: dawidd6/action-send-mail@v3
+        with:
+          server_address: smtp.gmail.com
+          server_port: 465
+          secure: true
+          username: ${{ secrets.MAIL_USERNAME }}
+          password: ${{ secrets.MAIL_PASSWORD }}
+          subject: "Studio Field — today's picks"
+          to:   ${{ secrets.MAIL_TO }}
+          from: "Studio Field <${{ secrets.MAIL_USERNAME }}>"
+          html_body: file://email-body.html
